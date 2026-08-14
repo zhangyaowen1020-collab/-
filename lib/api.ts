@@ -36,5 +36,12 @@ export function jsonError(error: unknown) {
   if (error instanceof ApiError) {
     return Response.json({ error: error.message }, { status: error.status });
   }
+
+  console.error(
+    "Unhandled API error",
+    error instanceof Error
+      ? { name: error.name, message: error.message }
+      : { type: typeof error },
+  );
   return Response.json({ error: "服务器暂时无法处理请求。" }, { status: 500 });
 }

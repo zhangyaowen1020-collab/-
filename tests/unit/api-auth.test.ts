@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createSession } from "@/lib/auth";
-import { ApiError, requireSameOrigin, requireSession } from "@/lib/api";
+import { ApiError, jsonError, requireSameOrigin, requireSession } from "@/lib/api";
 
 describe("protected API helpers", () => {
   it("accepts only a valid shared-session cookie", () => {
@@ -27,5 +27,19 @@ describe("protected API helpers", () => {
       expect(error).toBeInstanceOf(ApiError);
       expect((error as ApiError).status).toBe(403);
     }
+  });
+
+  it("logs unexpected server errors while returning a generic client response", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = jsonError(new Error("database request failed"));
+
+    expect(await response.json()).toEqual({ error: "服务器暂时无法处理请求。" });
+    expect(response.status).toBe(500);
+    expect(log).toHaveBeenCalledWith("Unhandled API error", {
+      name: "Error",
+      message: "database request failed",
+    });
+
+    log.mockRestore();
   });
 });
