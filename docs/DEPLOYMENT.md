@@ -15,7 +15,7 @@ npm run generate:secrets
 ## 2. 创建 Vercel 项目
 
 1. 登录 https://vercel.com/ 。
-2. 新建项目并导入此代码仓库；Root Directory 选择 cloud-workbench。
+2. 新建项目并导入此代码仓库；Root Directory 保持默认的 `./`（仓库根目录）。
 3. 在 Settings → Environment Variables 选择 Production 和 Preview，添加以下四项：
 
 | 名称 | 填什么 |
