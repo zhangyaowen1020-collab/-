@@ -44,6 +44,9 @@ function repositoryError(error: { message: string } | null) {
   if (message.includes("GROUP_LIMIT_REACHED")) {
     return new ApiError(400, "单个任务最多可创建 99 个任务组。");
   }
+  if (message.includes("MODEL_LIMIT_REACHED")) {
+    return new ApiError(400, "每个任务组最多上传 5 张模特图。");
+  }
   if (message.includes("INVALID_APPLY_MODE")) {
     return new ApiError(400, "换装模式无效。");
   }
@@ -80,7 +83,7 @@ export async function addGroup(
   client: SupabaseClient,
   jobDate: string,
   expectedVersion: number,
-  applyMode: "top" | "bottom" | "set",
+  applyMode: "top" | "bottom" | "set" | "full_look",
 ) {
   const result = await client.rpc("add_group", {
     p_job_date: jobDate,
@@ -124,7 +127,7 @@ export async function addAsset(
     jobDate: string;
     expectedVersion: number;
     groupId: string;
-    role: "model" | "top" | "bottom";
+    role: "model" | "top" | "bottom" | "full_look";
     originalName: string;
     sha256: string;
     width: number;

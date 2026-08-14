@@ -6,7 +6,7 @@ import { assertMutationVersion } from "@/lib/job-mutations";
 import { addAsset, getJobByDate } from "@/lib/repositories";
 import { parseGroupId, parseJobDate, requireWriteAccess } from "@/lib/request-guards";
 
-const validRoles = new Set(["model", "top", "bottom"]);
+const validRoles = new Set(["model", "top", "bottom", "full_look"]);
 
 export async function POST(
   request: Request,
@@ -39,7 +39,7 @@ export async function POST(
         jobDate,
         expectedVersion,
         groupId,
-        role: rawRole as "model" | "top" | "bottom",
+        role: rawRole as "model" | "top" | "bottom" | "full_look",
         originalName: safeName,
         sha256: createHash("sha256").update(bytes).digest("hex"),
         width,

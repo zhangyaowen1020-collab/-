@@ -1,7 +1,7 @@
 import type { Phase } from "@/lib/domain";
 
 type SavedAsset = {
-  role: "model" | "top" | "bottom";
+  role: "model" | "top" | "bottom" | "full_look";
   original_name: string;
   width: number;
   height: number;
@@ -10,7 +10,7 @@ type SavedAsset = {
 
 type SavedGroup = {
   group_id: string;
-  apply_mode: "top" | "bottom" | "set";
+  apply_mode: "top" | "bottom" | "set" | "full_look";
   baseline_attempt: number;
   expansion_attempt: number;
   assets: SavedAsset[];

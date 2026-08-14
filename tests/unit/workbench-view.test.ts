@@ -13,6 +13,7 @@ describe("workbench view rules", () => {
     expect(groupAssetSlots("top")).toEqual(["model", "top"]);
     expect(groupAssetSlots("bottom")).toEqual(["model", "bottom"]);
     expect(groupAssetSlots("set")).toEqual(["model", "top", "bottom"]);
+    expect(groupAssetSlots("full_look")).toEqual(["full_look", "model"]);
   });
 
   it("keeps upload visible while a contracted output is missing", () => {

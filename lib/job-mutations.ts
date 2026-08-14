@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const groupMutation = z.object({
-  applyMode: z.enum(["top", "bottom", "set"]),
+  applyMode: z.enum(["top", "bottom", "set", "full_look"]),
 });
 
 export function assertMutationVersion(value: string | null) {

@@ -39,6 +39,10 @@ npm run generate:secrets
 6. 技术 PASS 的图片才能点击“快速通过”。
 7. 从另一台设备同时打开并编辑，旧版本写入应提示刷新。
 
+## 数据库迁移
+
+首次部署图片预览、每组最多 5 张模特图和“一套换装”前，请在 Supabase SQL Editor 运行 `supabase/migrations/0006_full_look_and_model_limit.sql` 的完整内容，再重新部署 Vercel。
+
 ## 密钥轮换
 
 如果密钥或密码外泄：立即在 Supabase 轮换秘密密钥、重新运行生成脚本设置新密码，然后在 Vercel 更新对应变量并重新部署。更换 SESSION_SECRET 会让旧登录全部失效。

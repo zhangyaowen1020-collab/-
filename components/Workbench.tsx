@@ -4,11 +4,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { expectedOutput } from "@/lib/output-contract";
 import { quickPassPayload } from "@/lib/quick-pass";
+import { selectModelFiles } from "@/lib/asset-selection";
 import { canDeleteGroup, groupAssetSlots } from "@/lib/workbench-view";
 
 type Asset = {
   id: string;
-  role: "model" | "top" | "bottom";
+  role: "model" | "top" | "bottom" | "full_look";
   original_name: string;
   width: number;
   height: number;
@@ -23,7 +24,7 @@ type Output = {
 type Group = {
   id: string;
   group_id: string;
-  apply_mode: "top" | "bottom" | "set";
+  apply_mode: "top" | "bottom" | "set" | "full_look";
   status: string;
   baseline_attempt: number;
   assets: Asset[];
@@ -31,7 +32,7 @@ type Group = {
 };
 type Job = { id: string; job_date: string; version: number; groups: Group[] };
 
-const roleName = { model: "模特图", top: "上装", bottom: "下装" };
+const roleName = { model: "模特图", top: "上装", bottom: "下装", full_look: "整套参考图" };
 
 function today() {
   const now = new Date();
@@ -123,6 +124,30 @@ export function Workbench() {
     });
   }
 
+  async function uploadModels(group: Group, files: File[]) {
+    if (!job) return;
+    const selection = selectModelFiles(group.assets.filter((asset) => asset.role === "model").length, files);
+    await run(async () => {
+      let currentJob = job;
+      for (const file of selection.accepted) {
+        const form = new FormData();
+        form.set("file", file);
+        const response = await fetch("/api/jobs/" + currentJob.job_date + "/groups/" + group.group_id + "/assets/model", {
+          method: "POST", headers: { "If-Match-Version": String(currentJob.version) }, body: form,
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "模特图上传失败。");
+        currentJob = payload.job;
+        setJob(currentJob);
+      }
+    });
+    if (selection.rejected) setMessage("每个任务组最多上传 5 张模特图。");
+  }
+
+  function previewUrl(asset: Asset) {
+    return job ? "/api/jobs/" + job.job_date + "/assets/" + asset.id + "/preview" : "";
+  }
+
   async function removeGroup(group: Group) {
     if (!job || !window.confirm("确认删除 " + group.group_id + " 吗？草稿素材也会删除。")) return;
     await run(async () => {
@@ -209,7 +234,7 @@ export function Workbench() {
         <h2>新增任务组</h2>
         <div className="inline-actions">
           <select value={mode} onChange={(event) => setMode(event.target.value as Group["apply_mode"])}>
-            <option value="set">上装 + 下装</option><option value="top">仅上装</option><option value="bottom">仅下装</option>
+            <option value="set">上装 + 下装</option><option value="top">仅上装</option><option value="bottom">仅下装</option><option value="full_look">一套换装</option>
           </select>
           <button className="primary" type="button" disabled={busy} onClick={() => void addGroup()}>新增任务组</button>
         </div>
@@ -228,16 +253,31 @@ export function Workbench() {
     {job?.groups.map((group) => <section className="card group-card" key={group.id}>
       <div className="group-title">
         <h2>{group.group_id}</h2>
-        <span>{group.apply_mode === "set" ? "上装 + 下装" : group.apply_mode === "top" ? "仅上装" : "仅下装"}</span>
+        <span>{group.apply_mode === "set" ? "上装 + 下装" : group.apply_mode === "top" ? "仅上装" : group.apply_mode === "bottom" ? "仅下装" : "一套换装"}</span>
         {canDeleteGroup(group) && <button type="button" className="danger" disabled={busy} onClick={() => void removeGroup(group)}>删除草稿组</button>}
       </div>
       <div className="asset-grid">
-        {groupAssetSlots(group.apply_mode).map((role) => <label className="asset-slot" key={role}>
-          <strong>{roleName[role]}</strong>
-          <span>{group.assets.filter((asset) => asset.role === role).map((asset) => asset.original_name).join("、") || "尚未上传"}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
-            onChange={(event) => void uploadAsset(group, role, event.target.files?.[0])} />
-        </label>)}
+        {groupAssetSlots(group.apply_mode).map((role) => {
+          const assets = group.assets.filter((asset) => asset.role === role).sort((left, right) => left.asset_ordinal - right.asset_ordinal);
+          return <div className="asset-slot" key={role}>
+            <strong>{roleName[role]}{role === "model" ? "（最多 5 张）" : ""}</strong>
+            <div className="asset-preview-list">
+              {assets.length === 0 ? <span>尚未上传</span> : assets.map((asset) => <figure className="asset-preview" key={asset.id}>
+                <img src={previewUrl(asset)} alt={asset.original_name} />
+                <figcaption>{role === "model" ? `T${String(asset.asset_ordinal).padStart(2, "0")} · ` : ""}{asset.original_name}</figcaption>
+              </figure>)}
+            </div>
+            <label className="upload-control">{role === "model" ? "添加模特图" : "上传图片"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" multiple={role === "model"} disabled={busy}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.currentTarget.value = "";
+                  if (role === "model") void uploadModels(group, files);
+                  else void uploadAsset(group, role, files[0]);
+                }} />
+            </label>
+          </div>;
+        })}
       </div>
       <div className="outputs">
         <h3>基准成图与质检</h3>

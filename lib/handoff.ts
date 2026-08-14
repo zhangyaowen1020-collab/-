@@ -2,7 +2,7 @@ import { type Phase } from "@/lib/domain";
 import { expectedOutput } from "@/lib/output-contract";
 
 type Asset = {
-  role: "model" | "top" | "bottom";
+  role: "model" | "top" | "bottom" | "full_look";
   originalName: string;
   width?: number;
   height?: number;
@@ -10,7 +10,7 @@ type Asset = {
 
 type Group = {
   groupId: string;
-  applyMode: "top" | "bottom" | "set";
+  applyMode: "top" | "bottom" | "set" | "full_look";
   attempt: number;
   assets: Asset[];
 };
@@ -26,11 +26,13 @@ export function renderHandoff(input: { jobDate: string; phase: Phase; groups: Gr
     const models = group.assets.filter((asset) => asset.role === "model");
     const top = group.assets.find((asset) => asset.role === "top");
     const bottom = group.assets.find((asset) => asset.role === "bottom");
-    const mode = group.applyMode === "set" ? "套装（上装和下装）" : group.applyMode === "top" ? "仅上装" : "仅下装";
+    const fullLook = group.assets.find((asset) => asset.role === "full_look");
+    const mode = group.applyMode === "set" ? "套装（上装和下装）" : group.applyMode === "top" ? "仅上装" : group.applyMode === "bottom" ? "仅下装" : "整套换装";
     const assets = [
       "模式：" + mode,
       top ? "上装参考：" + top.originalName : "",
       bottom ? "下装参考：" + bottom.originalName : "",
+      fullLook ? "整套参考图：" + fullLook.originalName : "",
     ].filter(Boolean);
     const targets = models.map((model, index) => {
       const output = expectedOutput({
