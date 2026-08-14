@@ -16,6 +16,7 @@ export type JobSnapshot = {
 export type JobOutput = {
   id: string;
   output_file: string;
+  object_key: string;
   technical_status: "PASS" | "FAIL";
 };
 
@@ -35,7 +36,7 @@ function repositoryError(error: { message: string } | null) {
   if (message.includes("VERSION_CONFLICT")) {
     return new ApiError(409, "该任务已被另一台设备修改，请刷新后重试。");
   }
-  if (message.includes("JOB_NOT_FOUND") || message.includes("GROUP_NOT_FOUND")) {
+  if (message.includes("JOB_NOT_FOUND") || message.includes("GROUP_NOT_FOUND") || message.includes("ASSET_NOT_FOUND")) {
     return new ApiError(404, "未找到该任务或任务组。");
   }
   if (message.includes("GROUP_NOT_DRAFT") || message.includes("GROUP_HAS_OUTPUTS")) {
@@ -119,6 +120,34 @@ export async function deleteDraftGroup(
     await client.storage.from("tryon-assets").remove(objectKeys);
   }
   return result.data;
+}
+
+export async function deleteDraftAsset(
+  client: SupabaseClient,
+  parameters: {
+    jobDate: string;
+    expectedVersion: number;
+    groupId: string;
+    role: "model" | "top" | "bottom" | "full_look";
+    assetId: string;
+  },
+) {
+  const result = await client.rpc("delete_draft_asset", {
+    p_job_date: parameters.jobDate,
+    p_expected_version: parameters.expectedVersion,
+    p_group_id: parameters.groupId,
+    p_role: parameters.role,
+    p_asset_id: parameters.assetId,
+  }).single();
+  if (result.error) throw repositoryError(result.error);
+  const deleted = result.data as { version: number; object_key: string };
+
+  if (deleted.object_key) {
+    // The database row is already gone. A failed storage cleanup only leaves
+    // an unreachable private object and never restores the deleted asset.
+    await client.storage.from("tryon-assets").remove([deleted.object_key]);
+  }
+  return deleted;
 }
 
 export async function addAsset(

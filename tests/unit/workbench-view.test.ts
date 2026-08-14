@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { canDeleteGroup, groupAssetSlots, needsResultUpload } from "@/lib/workbench-view";
@@ -19,5 +20,15 @@ describe("workbench view rules", () => {
   it("keeps upload visible while a contracted output is missing", () => {
     expect(needsResultUpload({ expected: 2, uploaded: 1 })).toBe(true);
     expect(needsResultUpload({ expected: 2, uploaded: 2 })).toBe(false);
+  });
+
+  it("offers deletable source images and a preview before confirming a result upload", async () => {
+    const source = await readFile("components/Workbench.tsx", "utf8");
+
+    expect(source).toContain("deleteAsset");
+    expect(source).toContain("确认上传");
+    expect(source).toContain("重新选择");
+    expect(source).toContain("pendingOutputs");
+    expect(source).toContain('"/outputs/" + encodeURIComponent(output.output_file) + "/preview"');
   });
 });

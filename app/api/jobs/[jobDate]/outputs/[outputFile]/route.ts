@@ -25,7 +25,7 @@ export async function POST(
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new ApiError(400, "请选择成图 PNG 文件。");
-    validateResultFile({ declaredOutputFile: outputFile, uploadedName: file.name, contentType: file.type });
+    validateResultFile({ contentType: file.type });
     const bytes = new Uint8Array(await file.arrayBuffer());
     const dimensions = imageMetadata(bytes);
     const job = await getJobByDate(client, jobDate);

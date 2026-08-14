@@ -5,7 +5,7 @@ import { findOutputInJob } from "@/lib/repositories";
 describe("job output lookup", () => {
   it("finds an output only within the current task snapshot", () => {
     const output = findOutputInJob({
-      groups: [{ group_id: "G01", outputs: [{ id: "a", output_file: "G01-T01-F01-01-front-v1.png", technical_status: "PASS" }] }],
+      groups: [{ group_id: "G01", outputs: [{ id: "a", output_file: "G01-T01-F01-01-front-v1.png", object_key: "jobs/job/groups/group/outputs/baseline/1/a.png", technical_status: "PASS" }] }],
     }, "G01-T01-F01-01-front-v1.png");
 
     expect(output).toMatchObject({ id: "a", technical_status: "PASS" });

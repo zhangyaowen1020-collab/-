@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { expectedOutput } from "@/lib/output-contract";
 import { quickPassPayload } from "@/lib/quick-pass";
@@ -31,6 +31,7 @@ type Group = {
   outputs: Output[];
 };
 type Job = { id: string; job_date: string; version: number; groups: Group[] };
+type PendingOutput = { file: File; previewUrl: string };
 
 const roleName = { model: "模特图", top: "上装", bottom: "下装", full_look: "整套参考图" };
 
@@ -47,6 +48,8 @@ export function Workbench() {
   const [handoff, setHandoff] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
+  const [pendingOutputs, setPendingOutputs] = useState<Record<string, PendingOutput>>({});
+  const pendingPreviewUrls = useRef(new Set<string>());
   const headers = useMemo(() => {
     const result: Record<string, string> = {};
     if (job) result["If-Match-Version"] = String(job.version);
@@ -69,14 +72,19 @@ export function Workbench() {
   }
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => () => {
+    pendingPreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setMessage("");
     try {
       await action();
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "操作失败，请重试。");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -176,6 +184,52 @@ export function Workbench() {
     return job ? "/api/jobs/" + job.job_date + "/assets/" + asset.id + "/preview" : "";
   }
 
+  function outputPreviewUrl(output: Output) {
+    return job ? "/api/jobs/" + job.job_date + "/outputs/" + encodeURIComponent(output.output_file) + "/preview" : "";
+  }
+
+  function clearPendingOutput(outputFile: string) {
+    setPendingOutputs((current) => {
+      const selected = current[outputFile];
+      if (!selected) return current;
+      URL.revokeObjectURL(selected.previewUrl);
+      pendingPreviewUrls.current.delete(selected.previewUrl);
+      const { [outputFile]: _, ...remaining } = current;
+      return remaining;
+    });
+  }
+
+  function selectOutput(outputFile: string, file?: File) {
+    if (!file) return;
+    if (file.type !== "image/png") {
+      setMessage("请选择 PNG 成图。");
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setPendingOutputs((current) => {
+      const previous = current[outputFile];
+      if (previous) {
+        URL.revokeObjectURL(previous.previewUrl);
+        pendingPreviewUrls.current.delete(previous.previewUrl);
+      }
+      pendingPreviewUrls.current.add(previewUrl);
+      return { ...current, [outputFile]: { file, previewUrl } };
+    });
+  }
+
+  async function deleteAsset(group: Group, asset: Asset) {
+    if (!job || !window.confirm("确认删除这张" + roleName[asset.role] + "吗？")) return;
+    await run(async () => {
+      const response = await fetch(
+        "/api/jobs/" + job.job_date + "/groups/" + group.group_id + "/assets/" + asset.role + "/" + asset.id,
+        { method: "DELETE", headers },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "删除图片失败。");
+      setJob(payload.job);
+    });
+  }
+
   async function removeGroup(group: Group) {
     if (!job || !window.confirm("确认删除 " + group.group_id + " 吗？草稿素材也会删除。")) return;
     await run(async () => {
@@ -207,17 +261,17 @@ export function Workbench() {
   }
 
   async function uploadOutput(group: Group, asset: Asset, ordinal: number, file?: File) {
-    await run(async () => {
+    const outputFile = expectedOutput({
+      groupId: group.group_id,
+      phase: "baseline",
+      attempt: group.baseline_attempt + 1,
+      targetOrdinal: ordinal,
+      modelName: asset.original_name,
+      width: asset.width,
+      height: asset.height,
+    }).outputFile;
+    const uploaded = await run(async () => {
       if (!job || !file) throw new Error("请选择对应的 PNG 成图。");
-      const outputFile = expectedOutput({
-        groupId: group.group_id,
-        phase: "baseline",
-        attempt: group.baseline_attempt + 1,
-        targetOrdinal: ordinal,
-        modelName: asset.original_name,
-        width: asset.width,
-        height: asset.height,
-      }).outputFile;
       const form = new FormData();
       form.set("file", file);
       const response = await fetch("/api/jobs/" + job.job_date + "/outputs/" + encodeURIComponent(outputFile), {
@@ -229,6 +283,7 @@ export function Workbench() {
       if (!response.ok) throw new Error(payload.error || "成图上传失败。");
       setJob(payload.job);
     });
+    if (uploaded) clearPendingOutput(outputFile);
   }
 
   async function quickPass(output: Output) {
@@ -298,6 +353,7 @@ export function Workbench() {
               {assets.length === 0 ? <span>尚未上传</span> : assets.map((asset) => <figure className="asset-preview" key={asset.id}>
                 <img src={previewUrl(asset)} alt={asset.original_name} />
                 <figcaption>{role === "model" ? `T${String(asset.asset_ordinal).padStart(2, "0")} · ` : ""}{asset.original_name}</figcaption>
+                {group.status === "DRAFT" && <button type="button" className="asset-delete" disabled={busy} onClick={() => void deleteAsset(group, asset)}>删除</button>}
               </figure>)}
             </div>
             <label className="upload-control">{role === "model" ? "添加模特图" : "上传图片"}
@@ -315,7 +371,7 @@ export function Workbench() {
       <div className="outputs">
         <h3>基准成图与质检</h3>
         {group.outputs.map((output) => <div className="output-row" key={output.id}>
-          <code>{output.output_file}</code>
+          <img className="result-preview" src={outputPreviewUrl(output)} alt="已上传基准成图" />
           <span className={output.technical_status === "PASS" ? "pass" : "fail"}>技术：{output.technical_status}</span>
           {output.reviews?.[0] ? <span>人工：{output.reviews[0].final_status}</span>
             : output.technical_status === "PASS"
@@ -328,11 +384,29 @@ export function Workbench() {
             targetOrdinal: index + 1, modelName: asset.original_name, width: asset.width, height: asset.height,
           }).outputFile;
           const exists = group.outputs.some((output) => output.output_file === outputFile);
-          return !exists && <label className="result-upload" key={asset.id}>
-            上传 {outputFile}
-            <input type="file" accept="image/png" disabled={busy}
-              onChange={(event) => void uploadOutput(group, asset, index + 1, event.target.files?.[0])} />
-          </label>;
+          const pendingOutput = pendingOutputs[outputFile];
+          return !exists && <div className="result-upload" key={asset.id}>
+            <strong>模特 T{String(index + 1).padStart(2, "0")} 成图</strong>
+            {pendingOutput ? <div className="pending-result">
+              <img className="result-preview" src={pendingOutput.previewUrl} alt="待上传成图预览" />
+              <span>{pendingOutput.file.name}</span>
+              <div className="inline-actions">
+                <button type="button" className="primary" disabled={busy} onClick={() => void uploadOutput(group, asset, index + 1, pendingOutput.file)}>确认上传</button>
+                <label className="upload-control">重新选择
+                  <input type="file" accept="image/png" disabled={busy} onChange={(event) => {
+                    selectOutput(outputFile, event.target.files?.[0]);
+                    event.currentTarget.value = "";
+                  }} />
+                </label>
+                <button type="button" disabled={busy} onClick={() => clearPendingOutput(outputFile)}>取消</button>
+              </div>
+            </div> : <label className="upload-control">选择 PNG 图片
+              <input type="file" accept="image/png" disabled={busy} onChange={(event) => {
+                selectOutput(outputFile, event.target.files?.[0]);
+                event.currentTarget.value = "";
+              }} />
+            </label>}
+          </div>;
         })}
       </div>
     </section>)}
