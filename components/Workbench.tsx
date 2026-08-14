@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
 import { expectedOutput } from "@/lib/output-contract";
 import { quickPassPayload } from "@/lib/quick-pass";
-import { selectModelFiles } from "@/lib/asset-selection";
+import { selectDroppedImageFiles, selectModelFiles } from "@/lib/asset-selection";
 import { canDeleteGroup, groupAssetSlots } from "@/lib/workbench-view";
 
 type Asset = {
@@ -46,6 +46,7 @@ export function Workbench() {
   const [message, setMessage] = useState("");
   const [handoff, setHandoff] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
   const headers = useMemo(() => {
     const result: Record<string, string> = {};
     if (job) result["If-Match-Version"] = String(job.version);
@@ -142,6 +143,33 @@ export function Workbench() {
       }
     });
     if (selection.rejected) setMessage("每个任务组最多上传 5 张模特图。");
+  }
+
+  function assetSlotKey(group: Group, role: Asset["role"]) {
+    return `${group.id}:${role}`;
+  }
+
+  function uploadSelectedFiles(group: Group, role: Asset["role"], files: File[]) {
+    if (busy) {
+      setMessage("正在上传，请等待当前操作完成。");
+      return;
+    }
+    const selection = selectDroppedImageFiles(role, files);
+    if (selection.accepted.length === 0) {
+      setMessage(selection.rejectedNonImages ? "请只拖入 JPG、PNG 或 WebP 图片。" : "没有接收到图片文件。");
+      return;
+    }
+    if (role === "model") void uploadModels(group, selection.accepted);
+    else void uploadAsset(group, role, selection.accepted[0]);
+    if (selection.rejectedNonImages || selection.ignoredExtra) {
+      setMessage("已上传可用图片；服装参考卡每次只接收第一张图片。");
+    }
+  }
+
+  function handleAssetDrop(event: DragEvent<HTMLDivElement>, group: Group, role: Asset["role"]) {
+    event.preventDefault();
+    setDragTarget(null);
+    uploadSelectedFiles(group, role, Array.from(event.dataTransfer.files));
   }
 
   function previewUrl(asset: Asset) {
@@ -259,7 +287,12 @@ export function Workbench() {
       <div className="asset-grid">
         {groupAssetSlots(group.apply_mode).map((role) => {
           const assets = group.assets.filter((asset) => asset.role === role).sort((left, right) => left.asset_ordinal - right.asset_ordinal);
-          return <div className="asset-slot" key={role}>
+          const slotKey = assetSlotKey(group, role);
+          return <div className={`asset-slot ${dragTarget === slotKey ? "drag-over" : ""}`} key={role}
+            onDragEnter={(event) => { event.preventDefault(); setDragTarget(slotKey); }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={(event) => { event.preventDefault(); setDragTarget(null); }}
+            onDrop={(event) => handleAssetDrop(event, group, role)}>
             <strong>{roleName[role]}{role === "model" ? "（最多 5 张）" : ""}</strong>
             <div className="asset-preview-list">
               {assets.length === 0 ? <span>尚未上传</span> : assets.map((asset) => <figure className="asset-preview" key={asset.id}>
@@ -272,10 +305,10 @@ export function Workbench() {
                 onChange={(event) => {
                   const files = Array.from(event.target.files ?? []);
                   event.currentTarget.value = "";
-                  if (role === "model") void uploadModels(group, files);
-                  else void uploadAsset(group, role, files[0]);
+                  uploadSelectedFiles(group, role, files);
                 }} />
             </label>
+            <p className="drop-hint">可直接将桌面图片拖到这里，或点击上传。</p>
           </div>;
         })}
       </div>
