@@ -20,9 +20,9 @@ describe("result upload resolution", () => {
     });
   });
 
-  it("retains a correctly named wrong-sized image as technical FAIL", () => {
+  it("keeps a correctly named PNG as technical PASS when its dimensions differ", () => {
     expect(resolveResultUpload(group, "G01-T01-F01-01-front-v1.png", 1000, 1499)).toMatchObject({
-      technicalStatus: "FAIL",
+      technicalStatus: "PASS",
     });
   });
 

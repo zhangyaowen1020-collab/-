@@ -207,6 +207,26 @@ export async function addOutput(
   return result.data;
 }
 
+export async function deleteOutput(
+  client: SupabaseClient,
+  parameters: { jobDate: string; expectedVersion: number; outputFile: string },
+) {
+  const result = await client.rpc("delete_output", {
+    p_job_date: parameters.jobDate,
+    p_expected_version: parameters.expectedVersion,
+    p_output_file: parameters.outputFile,
+  }).single();
+  if (result.error) throw repositoryError(result.error);
+  const deleted = result.data as { version: number; object_key: string };
+
+  if (deleted.object_key) {
+    // The database row and any review are already removed. A failed storage
+    // cleanup can only leave one unreachable private object.
+    await client.storage.from("tryon-assets").remove([deleted.object_key]);
+  }
+  return deleted;
+}
+
 export async function saveReview(
   client: SupabaseClient,
   parameters: {

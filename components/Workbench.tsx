@@ -42,6 +42,7 @@ function today() {
 
 export function Workbench() {
   const [jobDate, setJobDate] = useState(today);
+  const [dateExpanded, setDateExpanded] = useState(true);
   const [job, setJob] = useState<Job | null>(null);
   const [mode, setMode] = useState<Group["apply_mode"]>("set");
   const [message, setMessage] = useState("");
@@ -217,6 +218,17 @@ export function Workbench() {
     });
   }
 
+  function handleOutputDrop(event: DragEvent<HTMLDivElement>, outputFile: string) {
+    event.preventDefault();
+    setDragTarget(null);
+    const file = Array.from(event.dataTransfer.files).find((item) => item.type === "image/png");
+    if (!file) {
+      setMessage("成图只支持 PNG 文件。");
+      return;
+    }
+    selectOutput(outputFile, file);
+  }
+
   async function deleteAsset(group: Group, asset: Asset) {
     if (!job || !window.confirm("确认删除这张" + roleName[asset.role] + "吗？")) return;
     await run(async () => {
@@ -226,6 +238,19 @@ export function Workbench() {
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "删除图片失败。");
+      setJob(payload.job);
+    });
+  }
+
+  async function deleteOutput(output: Output) {
+    if (!job || !window.confirm("确认删除这张成图和它的质检记录吗？")) return;
+    await run(async () => {
+      const response = await fetch(
+        "/api/jobs/" + job.job_date + "/outputs/" + encodeURIComponent(output.output_file),
+        { method: "DELETE", headers },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "删除成图失败。");
       setJob(payload.job);
     });
   }
@@ -305,11 +330,15 @@ export function Workbench() {
       <div><p className="eyebrow">云端协作工作台</p><h1>一手 AI 换装</h1></div>
       <a href="/login">切换密码</a>
     </header>
-    <form className="card date-card" onSubmit={openJob}>
+    {dateExpanded ? <form className="card date-card" onSubmit={openJob}>
       <label>任务日期<input type="date" value={jobDate} onChange={(event) => setJobDate(event.target.value)} /></label>
       <button className="primary" disabled={busy}>新建 / 打开任务</button>
-      {job && <strong>当前版本：{job.version}　任务组：{job.groups.length}</strong>}
-    </form>
+      <button type="button" className="quiet" disabled={busy} onClick={() => setDateExpanded(false)}>收起任务日期</button>
+      {job && <strong className="status-chip">当前版本：{job.version}　任务组：{job.groups.length}</strong>}
+    </form> : <div className="date-collapsed">
+      <button type="button" onClick={() => setDateExpanded(true)}>📅 {jobDate}　展开任务</button>
+      {job && <strong className="status-chip">任务组：{job.groups.length}</strong>}
+    </div>}
     {message && <p className="notice" role="alert">{message}</p>}
 
     {job && <section className="workbench-grid">
@@ -377,6 +406,7 @@ export function Workbench() {
             : output.technical_status === "PASS"
               ? <button type="button" disabled={busy} onClick={() => void quickPass(output)}>快速通过</button>
               : <span>技术检查未通过，不能快速通过</span>}
+          <button type="button" className="danger" disabled={busy} onClick={() => void deleteOutput(output)}>删除成图</button>
         </div>)}
         {group.assets.filter((asset) => asset.role === "model").sort((left, right) => left.asset_ordinal - right.asset_ordinal).map((asset, index) => {
           const outputFile = expectedOutput({
@@ -385,7 +415,12 @@ export function Workbench() {
           }).outputFile;
           const exists = group.outputs.some((output) => output.output_file === outputFile);
           const pendingOutput = pendingOutputs[outputFile];
-          return !exists && <div className="result-upload" key={asset.id}>
+          const slotKey = "output:" + outputFile;
+          return !exists && <div className={`result-upload ${dragTarget === slotKey ? "drag-over" : ""}`} key={asset.id}
+            onDragEnter={(event) => { event.preventDefault(); setDragTarget(slotKey); }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={(event) => { event.preventDefault(); setDragTarget(null); }}
+            onDrop={(event) => handleOutputDrop(event, outputFile)}>
             <strong>模特 T{String(index + 1).padStart(2, "0")} 成图</strong>
             {pendingOutput ? <div className="pending-result">
               <img className="result-preview" src={pendingOutput.previewUrl} alt="待上传成图预览" />
@@ -406,6 +441,7 @@ export function Workbench() {
                 event.currentTarget.value = "";
               }} />
             </label>}
+            <p className="drop-hint">可直接拖入 PNG 成图，文件名和像素尺寸不限。</p>
           </div>;
         })}
       </div>

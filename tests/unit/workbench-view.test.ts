@@ -31,4 +31,16 @@ describe("workbench view rules", () => {
     expect(source).toContain("pendingOutputs");
     expect(source).toContain('"/outputs/" + encodeURIComponent(output.output_file) + "/preview"');
   });
+
+  it("supports a compact date card plus drag and deletion controls for result images", async () => {
+    const source = await readFile("components/Workbench.tsx", "utf8");
+
+    expect(source).toContain("dateExpanded");
+    expect(source).toContain("收起任务日期");
+    expect(source).toContain("展开任务");
+    expect(source).toContain("handleOutputDrop");
+    expect(source).toContain("onDrop={(event) => handleOutputDrop");
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("删除成图");
+  });
 });
